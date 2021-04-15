@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Women in Parliament</title>
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js" integrity="sha512-LF8ZB1iTwi4Qvkm4pekHG4a437Y9Af5ZuwbnW4GTbAWQeR2E4KW8WF+xH8b9psevV7wIlDMx1MH9YfPqgKhA/Q==" crossorigin="anonymous"></script>
+
+    <style>
+
+        body{
+            background-color: white;
+        }
+
+        .vizContainer{
+            background-color: #ddd;
+            margin: auto;
+            width: 775px;
+            border: 1px solid #444;
+            padding: 5px 10px
+        }
+
+        h1{
+            margin: 0 20px;
+            font-size: 34px;
+        }
+
+        p{
+            padding: 2px 40px 2px 22px;
+            font-family: Helvetica;
+            text-align: justify;
+            color: #444;
+            margin: 0;
+        }
+
+        svg{
+            display: block;
+        }
+
+        g.g-country:hover{
+            fill: #ccc !important;
+            opacity: 0.85;
+        }
+
+        text.countries-label{
+            font-family: Helvetica;
+        }
+
+    </style>
+</head>
+<body>
+
+        <div class="vizContainer">
+                <h1>Women in Parliament in European Countries</h1>
+                <p>In the following visualisation, each country is represented by a circle whose size depends on its population. 
+                The radius of the inner circle shows how close the country is to achieving gender equality in its parliament bodies.
+                <br><br>
+                Countries closer to realising this goal are located towards the right of the graph. 
+                </p>
+                <br>
+                <div id="my_dataviz"></div>
+        </div>
+          
+        <script>
+
+        // Create DAT.GUI controls
+        var gui = new dat.GUI();
+        
+
+        // Initial values for all params
+        var controls = {
+            SVG_WIDTH:  800,
+            SVG_HEIGHT: 600,
+            RADIUS_PARAM: 1.55,
+            COLLISION_PARAM: 0.95,
+            FORCEX_PARAM: 1.4,
+            FORCEY_PARAM: 1.4,
+            COLOR: 0x000000,
+        }
+
+        // Redraw graph on change in controls
+        updateViz = function(){
+            d3.selectAll("svg").remove()
+            drawViz()
+        }
+
+        // Add controls to GUI and add event listeners for change in values
+        gui.add(controls, "SVG_WIDTH").min(0).max(1000).step(25).onChange(updateViz);
+        gui.add(controls, "SVG_HEIGHT").min(0).max(1000).step(25).onChange(updateViz);
+        gui.add(controls, "RADIUS_PARAM").min(0).max(10).step(0.01).onChange(updateViz);
+        gui.add(controls, "COLLISION_PARAM").min(0).max(2).step(0.05).onChange(updateViz);
+        gui.add(controls, "FORCEX_PARAM").min(0).max(2).step(0.05).onChange(updateViz);
+        gui.add(controls, "FORCEY_PARAM").min(0).max(2).step(0.05).onChange(updateViz);
+        gui.add(controls, "COLOR").min(0x000000).max(0xffffff).step(0x000001).onChange( () => d3.select("body").style("background-color", "#"+controls.COLOR.toString(16)));
+
+        function drawViz(){
+        
+        // dimensions based on control values
+        var width = controls.SVG_WIDTH
+        var height = controls.SVG_HEIGHT
+
+        // append the svg object to the body of the page
+        var svg = d3.select("#my_dataviz")
+          .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+
+        var svg = d3.select("svg");
+
+        d3.csv("wip_data.csv",
+            function(d){
+                return {country: d.country, perc: +d.perc, pop: +d.pop}
+            }, (data) =>{
+        
+        // radius for outer circle
+        var radiusScale = d3.scaleLinear()
+            .domain(d3.extent(data, d => d.pop))
+            .range([20,80])
+        
+        // adjust font size based on inner circle size
+        var labelSizeScale = d3.scaleLinear()
+            .domain(d3.extent(data, d => ((d.pop) * (d.perc)) )) // measure of inner circle radius
+            .range([8,22])
+        
+        // X position of circle based on percentage of women
+        var xScale = d3.scaleLinear()
+            .domain(d3.extent( data, d => d.perc ))
+            .range([width * 0.3, width * 0.7])
+
+        var node = svg.append("g")
+            .selectAll("circle.countries")
+            .data(data)
+            .enter()
+            .append("g")
+            .attr("class", d => "g-country g-"+ d.country.split(" ")[0]) // Taking the first word only for country names with spaces
+            .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+        // outer circle
+        var circles = node
+            .append("circle")
+                .attr("class","countries")
+                .attr("r", d => radiusScale(d.pop) * controls.RADIUS_PARAM )
+                .attr("cx", width / 2)
+                .attr("cy", height / 2)
+                .style("fill", d => "white")
+                .style("fill-opacity", 0.85)
+                .attr("stroke", "#222")
+                .style("stroke-width", 1)
+
+        var inner_circles = node
+            .append("circle")
+                .attr("class","countries-inner")
+                .attr("r", d => radiusScale(d.pop) * controls.RADIUS_PARAM * d.perc * 2)
+                .attr("cx", width / 2)
+                .attr("cy", height / 2)
+                .style("fill", d => "#222")
+                .style("fill-opacity", 0.85)
+                .attr("stroke", "#222")
+                .style("stroke-width", 1)
+            
+        var labels = node
+            .append("text")
+                .attr("class","countries-label")
+                .attr("x", width / 2)
+                .attr("y", height / 2)
+                .attr("fill", "#eee")
+                .style("text-anchor", "middle")
+                .style("font-size", d => labelSizeScale( ((d.pop) * (d.perc))))
+                .text(d => d.country)
+               
+        
+        // Features of the forces applied to the nodes:
+        var simulation = d3.forceSimulation()
+            .force("forceX", d3.forceX().strength( d=> d.perc * controls.FORCEX_PARAM ).x( d => xScale(d.perc) ))
+            .force("forceY", d3.forceY().strength( d=> d.perc * controls.FORCEY_PARAM ).y( height/ 2 ))
+            .force("charge", d3.forceManyBody().strength(1)) 
+            .force("collide", d3.forceCollide().strength(.03).radius(d => (radiusScale(d.pop) * controls.RADIUS_PARAM) * controls.COLLISION_PARAM).iterations(30)) // Force that avoids circle overlapping
+        
+        // Apply these forces to the nodes and the tooltip and update their positions.
+        simulation
+            .nodes(data)
+            .on("tick", function(d){
+                circles
+                  .attr("cx", function(d){ return d.x; })
+                  .attr("cy", function(d){ return d.y; })
+                inner_circles
+                  .attr("cx", function(d){ return d.x; })
+                  .attr("cy", function(d){ return d.y; })
+                labels
+                  .attr("x", function(d){ return d.x; })
+                  .attr("y", function(d){ return d.y; })
+            });
+        
+        // Functions for dragging of circles
+        function dragstarted(d) {
+            if (!d3.event.active) simulation.alphaTarget(.03).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        function dragged(d) {
+            d.fx = d3.event.x;
+            d.fy = d3.event.y;
+        }
+        function dragended(d) {
+            if (!d3.event.active) simulation.alphaTarget(.03);
+            d.fx = null;
+            d.fy = null;
+        }
+    })
+    } 
+      
+    drawViz()    
+    </script>
+    
+</body>
+</html>
